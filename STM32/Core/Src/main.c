@@ -43,15 +43,34 @@
 
 /* Private variables ---------------------------------------------------------*/
 TIM_HandleTypeDef htim1;
-TIM_HandleTypeDef htim2;
 TIM_HandleTypeDef htim4;
 
 UART_HandleTypeDef huart6;
+
+
 
 /* USER CODE BEGIN PV */
 extern uint8_t ibus_rx_buf[32];
 extern uint8_t ibus_rx_cplt_flag;
 uint16_t rxValues[6];
+
+
+int32_t dutyL, dutyR;
+int16_t speed, speedL, speedR, steering, mode;
+uint16_t CounterPeriod = 7200;
+int16_t direction = 0;
+int16_t directionL = 0;
+int16_t directionR = 0;
+
+uint16_t smoothing;
+uint16_t smoothingPrev;
+
+uint16_t window_size = 10;
+uint16_t window_index = 0;
+int32_t window[10];
+int32_t movingSum = 0;
+int32_t past = 0;
+
 
 /* USER CODE END PV */
 
@@ -61,7 +80,6 @@ static void MX_GPIO_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_USART6_UART_Init(void);
 static void MX_TIM1_Init(void);
-static void MX_TIM2_Init(void);
 static void MX_TIM4_Init(void);
 /* USER CODE BEGIN PFP */
 
@@ -103,17 +121,14 @@ int main(void)
   MX_USART2_UART_Init();
   MX_USART6_UART_Init();
   MX_TIM1_Init();
-  MX_TIM2_Init();
   MX_TIM4_Init();
   /* USER CODE BEGIN 2 */
   LL_USART_EnableIT_RXNE(USART2);
   LL_USART_EnableIT_RXNE(USART6);
 
 
-//  if (HAL_I2C_EnableListen_IT(&hi2c1) != HAL_OK)
-//  {
-//	  Error_Handler();
-//  }
+  HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);   // Output PWM Generation
+  HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);   // Output PWM Generation
 
   /* USER CODE END 2 */
 
@@ -124,8 +139,6 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-
-//	  HAL_I2C_Master_Transmit(&hi2c1,PICO_ADDR ,ibus_rx_buf, 32, 1000);
 
 	  if(ibus_rx_cplt_flag == 1)
 	  {
@@ -140,9 +153,87 @@ int main(void)
 			  	rxValues[4] = (ibus_rx_buf[10] | ibus_rx_buf[11]<<8);
 			  	rxValues[5] = (ibus_rx_buf[12] | ibus_rx_buf[13]<<8);
 			  HAL_UART_Transmit(&huart6, ibus_rx_buf, 32, 100);
-			  HAL_Delay(100);
+
 		  }
 	  }
+
+	  speed = rxValues[1];
+	  steering = rxValues[3];
+
+//	  window[window_index] = speed;
+//	  for (uint16_t i = 0; i < window_size; i++){
+//		  movingSum += window[i];
+//	  }
+//
+//	  movingSum = movingSum/window_size;
+//	  window_index = (window_index + 1)%window_size;
+//	  speed = movingSum;
+
+	  //smoothing
+	  smoothing = speed*0.20 + smoothingPrev*0.80;
+	  smoothingPrev = smoothing;
+	  speed = smoothing;
+
+	  speed = speed - 1500;
+	  steering = steering - 1500;
+	  if (speed > -50 && speed < 50){speed = 0;}
+	  if (steering > -50 && steering < 50){steering = 0;}
+
+	  if (steering == 0){
+		  direction = 0;
+		  if(speed < 0){
+			  direction = 1;
+			  speed = speed*-1;
+		  }
+		  speedL = speed;
+		  speedR = speed;
+		  directionR = direction;
+		  directionL = !direction;
+	  }
+	  else if (steering != 0 && speed == 0){
+		  direction = 0;
+		  if(steering < 0){
+			  direction = 1;
+			  steering = steering*-1;
+		  }
+		  speedL = steering;
+		  speedR = steering;
+		  directionR = direction;
+		  directionL = direction;
+
+	  }
+	  else {
+		  direction = 0;
+		  if(speed < 0){
+			  direction = 1;
+			  speed = speed*-1;
+		  }
+
+
+		  if(steering < 0){
+			  speedL = speed - (int16_t)(speed*steering/500);
+			  speedR = speed + (int16_t)(speed*steering/500);
+		  }
+		  else{
+			  speedL = speed + (int16_t)(speed*steering/500);
+			  speedR = speed - (int16_t)(speed*steering/500);
+		  }
+		  directionR = direction;
+		  directionL = !direction;
+
+	  }
+
+
+
+
+	  dutyL = (uint16_t) ((speedL*CounterPeriod)/500);
+	  dutyR = (uint16_t) ((speedR*CounterPeriod)/500);
+	  TIM1->CCR1 = dutyL;
+	  TIM1->CCR2 = dutyR;
+	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_14, directionL);
+	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_15, directionR);
+
+	  HAL_Delay(50);
   }
   /* USER CODE END 3 */
 }
@@ -216,7 +307,7 @@ static void MX_TIM1_Init(void)
   htim1.Instance = TIM1;
   htim1.Init.Prescaler = 0;
   htim1.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim1.Init.Period = 65535;
+  htim1.Init.Period = 7200;
   htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim1.Init.RepetitionCounter = 0;
   htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
@@ -266,54 +357,10 @@ static void MX_TIM1_Init(void)
     Error_Handler();
   }
   /* USER CODE BEGIN TIM1_Init 2 */
-
+  //HAL_TIM_IC_Start_IT(&htim1, TIM_CHANNEL_1); // Primary channel - rising edge
+  //HAL_TIM_IC_Start_IT(&htim1, TIM_CHANNEL_2); // Primary channel - rising edge
   /* USER CODE END TIM1_Init 2 */
   HAL_TIM_MspPostInit(&htim1);
-
-}
-
-/**
-  * @brief TIM2 Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_TIM2_Init(void)
-{
-
-  /* USER CODE BEGIN TIM2_Init 0 */
-
-  /* USER CODE END TIM2_Init 0 */
-
-  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
-  TIM_MasterConfigTypeDef sMasterConfig = {0};
-
-  /* USER CODE BEGIN TIM2_Init 1 */
-
-  /* USER CODE END TIM2_Init 1 */
-  htim2.Instance = TIM2;
-  htim2.Init.Prescaler = 0;
-  htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim2.Init.Period = 4294967295;
-  htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-  htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
-  if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
-  if (HAL_TIM_ConfigClockSource(&htim2, &sClockSourceConfig) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
-  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
-  if (HAL_TIMEx_MasterConfigSynchronization(&htim2, &sMasterConfig) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN TIM2_Init 2 */
-
-  /* USER CODE END TIM2_Init 2 */
 
 }
 
