@@ -55,10 +55,12 @@ extern uint8_t ibus_rx_cplt_flag;
 uint16_t rxValues[6];
 
 
-int32_t duty;
-int16_t speed;
+int32_t dutyL, dutyR;
+int16_t speed, speedL, speedR, steering, mode;
 uint16_t CounterPeriod = 7200;
-uint16_t direction = 0;
+int16_t direction = 0;
+int16_t directionL = 0;
+int16_t directionR = 0;
 
 uint16_t smoothing;
 uint16_t smoothingPrev;
@@ -156,7 +158,7 @@ int main(void)
 	  }
 
 	  speed = rxValues[1];
-//	  steering = rxValues[3];
+	  steering = rxValues[3];
 
 //	  window[window_index] = speed;
 //	  for (uint16_t i = 0; i < window_size; i++){
@@ -170,27 +172,66 @@ int main(void)
 	  //smoothing
 	  smoothing = speed*0.20 + smoothingPrev*0.80;
 	  smoothingPrev = smoothing;
-
 	  speed = smoothing;
 
 	  speed = speed - 1500;
+	  steering = steering - 1500;
+	  if (speed > -50 && speed < 50){speed = 0;}
+	  if (steering > -50 && steering < 50){steering = 0;}
 
-	  direction = 0;
-//	  if(speed > -50 && speed < 50){
-//		  speed = 0;
-//	  }
-	  if(speed < 0){
-		  direction = 1;
-		  speed = speed*-1;
+	  if (steering == 0){
+		  direction = 0;
+		  if(speed < 0){
+			  direction = 1;
+			  speed = speed*-1;
+		  }
+		  speedL = speed;
+		  speedR = speed;
+		  directionR = direction;
+		  directionL = !direction;
+	  }
+	  else if (steering != 0 && speed == 0){
+		  direction = 0;
+		  if(steering < 0){
+			  direction = 1;
+			  steering = steering*-1;
+		  }
+		  speedL = steering;
+		  speedR = steering;
+		  directionR = direction;
+		  directionL = direction;
+
+	  }
+	  else {
+		  direction = 0;
+		  if(speed < 0){
+			  direction = 1;
+			  speed = speed*-1;
+		  }
+
+
+		  if(steering < 0){
+			  speedL = speed - (int16_t)(speed*steering/500);
+			  speedR = speed + (int16_t)(speed*steering/500);
+		  }
+		  else{
+			  speedL = speed + (int16_t)(speed*steering/500);
+			  speedR = speed - (int16_t)(speed*steering/500);
+		  }
+		  directionR = direction;
+		  directionL = !direction;
+
 	  }
 
-	  duty = (uint16_t) ((speed*CounterPeriod)/500);
 
 
-	  TIM1->CCR1 = duty;
-	  TIM1->CCR2 = duty;
-	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_14, direction);
-	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_15, !direction);
+
+	  dutyL = (uint16_t) ((speedL*CounterPeriod)/500);
+	  dutyR = (uint16_t) ((speedR*CounterPeriod)/500);
+	  TIM1->CCR1 = dutyL;
+	  TIM1->CCR2 = dutyR;
+	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_14, directionL);
+	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_15, directionR);
 
 	  HAL_Delay(50);
   }
