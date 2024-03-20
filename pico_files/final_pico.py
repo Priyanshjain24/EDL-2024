@@ -3,7 +3,7 @@ import utime
 import ustruct
 import sys
 import time
-from math import atan2, acos, sin, cos
+from math import atan2, acos, sin, cos, asin, sqrt
 from math import pi as PI
 
 RADIAN_TO_DEGREE = 180 / PI
@@ -12,8 +12,8 @@ DISPLACEMENT_SCALE = 3
 BASE_SPEED_SCALE_R = 1
 BASE_SPEED_SCALE_L = 20
 
-l1 = 105
-l2 = 147
+l1 = 10.5
+l2 = 14.7
 t1_offset = 30
 t2_offset = 30
 
@@ -105,19 +105,23 @@ class robotic_arm:
         self.pwm_gen(on = on, off = off, index = joint_index)
 
     def getXY(self, t1, t2):
+        t1 = t1 * DEGREE_TO_RADIAN
+        t2 = t2 * DEGREE_TO_RADIAN
         x = l1 * sin(t1) + l2 * sin(t1 + t2)
         y = l1 * cos(t1) + l2 * cos(t1 + t2)
         return x, y
     
-    def getThetas(self):
+    def getThetas(self, x, y):
         '''
-        Solves IK for self.x and self.y
+        Solves IK for x and y 
         '''
-        x, y = self.x, self.y
         d2 = x**2 + y**2
         phi = atan2(y, x)
-        theta2 = acos((d2 - l1**2 - l2**2) / (2 * l1 * l2))
-        theta1 = PI/2 - phi - theta2/2
+        a = (d2 - l1**2 - l2**2) / (2 * l1 * l2)
+        a = clip(a, -1, 1)
+        theta2 = acos(a)
+        alpha = asin(sin(theta2) * l2 / sqrt(d2))
+        theta1 = PI/2 - phi - alpha
         theta1 = theta1 * RADIAN_TO_DEGREE
         theta2 = theta2 * RADIAN_TO_DEGREE
         return theta1, theta2
@@ -141,6 +145,7 @@ if __name__ == '__main__':
     store_delta = 0
     delta_angle = store_delta
     angle_values = [90]*6
+    X,Y = [14.5, 10]
     while(1):
         #########
         if time.time() - t_start > 300:  
@@ -186,10 +191,10 @@ if __name__ == '__main__':
             else :
                 angle_values[3] = 90 + rxValues[3] * BASE_SPEED_SCALE_L
                 
-            robotic_arm.set_joint_angle(1, angle_values[3])
-            robotic_arm.set_joint_angle(3, angle_values[2])
-            robotic_arm.set_joint_angle(4, angle_values[1])
-            robotic_arm.set_joint_angle(7, angle_values[0])
+   #         robotic_arm.set_joint_angle(1, angle_values[3])
+      #      robotic_arm.set_joint_angle(3, angle_values[2])
+     #       robotic_arm.set_joint_angle(4, angle_values[1])
+       #     robotic_arm.set_joint_angle(7, angle_values[0])
             
         elif mode == 2 :
             angle_values[5] += rxValues[3] * DISPLACEMENT_SCALE
@@ -197,26 +202,35 @@ if __name__ == '__main__':
             angle_values[4] += rxValues[2] * DISPLACEMENT_SCALE
             angle_values[4] = clip(angle_values[4], 0, 180)
             
-            theta1 = angle_values[2] - 39.34
-            theta2 = 142 - angle_values[1]
-            delTheta1 = rxValues[0] * DISPLACEMENT_SCALE
-            tdelt2 = -l1 * sin(theta1) / (l2 * sin(theta1 + theta2)) -1
-            delTheta2 = tdelt2 * delTheta1
-            theta1 += delTheta1
-            theta2 += delTheta2
+            #theta1 = angle_values[2] - 39.34
+            #theta2 = 142 - angle_values[1]
+            #delTheta1 = rxValues[0] * DISPLACEMENT_SCALE
+            #tdelt2 = -l1 * sin(theta1) / (l2 * sin(theta1 + theta2)) -1
+            #delTheta2 = tdelt2 * delTheta1
+            #theta1 += delTheta1
+            #theta2 += delTheta2
+            X = X + rxValues[0] * 0.2
+            Y = Y + rxValues[1] * 0.2
+            theta1, theta2 = robotic_arm.getThetas(X, Y)
+            
             angle_values[2] = theta1 + 39.34
             angle_values[1] = 142 - theta2
             
             angle_values[2] = clip(angle_values[2], 0, 180)
             angle_values[1] = clip(angle_values[1], 0, 180)
-            robotic_arm.set_joint_angle(3, angle_values[2])
-            robotic_arm.set_joint_angle(4, angle_values[1])
-            robotic_arm.set_joint_angle(8, angle_values[4])
-            robotic_arm.set_joint_angle(11, angle_values[5])
+            print(robotic_arm.getXY(angle_values[2] - 39.34, 142 - angle_values[1]))
+            #print(angle_values[2] - 39.34, 142 - angle_values[1])
+            
+        robotic_arm.set_joint_angle(3, angle_values[2])
+        robotic_arm.set_joint_angle(4, angle_values[1])
+        robotic_arm.set_joint_angle(8, angle_values[4])
+        robotic_arm.set_joint_angle(11, angle_values[5])
+        robotic_arm.set_joint_angle(7, angle_values[0])
+        X, Y = robotic_arm.getXY(angle_values[2] - 39.34, 142 - angle_values[1])
         #for i in range(4):
     
             #robotic_arm.set_joint_angle(i*4, angle_values[i])
-        print(angle_values)
+        #print(angle_values)
         
         time.sleep(loop_time)
 
