@@ -43,18 +43,15 @@
 
 /* Private variables ---------------------------------------------------------*/
 TIM_HandleTypeDef htim1;
-TIM_HandleTypeDef htim4;
 
 UART_HandleTypeDef huart6;
-
-
 
 /* USER CODE BEGIN PV */
 extern uint8_t ibus_rx_buf[32];
 extern uint8_t ibus_rx_cplt_flag;
-uint16_t rxValues[6];
+uint16_t rxValues[7];
 
-
+uint16_t LED;
 int32_t dutyL, dutyR;
 int16_t speed, speedL, speedR, steering, mode;
 uint16_t CounterPeriod = 7200;
@@ -62,14 +59,16 @@ int16_t direction = 0;
 int16_t directionL = 0;
 int16_t directionR = 0;
 
-uint16_t smoothing;
-uint16_t smoothingPrev;
+uint16_t smoothing, smoothing1;
+uint16_t smoothingPrev, smoothingPrev1;
 
 uint16_t window_size = 10;
 uint16_t window_index = 0;
 int32_t window[10];
 int32_t movingSum = 0;
 int32_t past = 0;
+
+int k =250;
 
 
 /* USER CODE END PV */
@@ -80,7 +79,6 @@ static void MX_GPIO_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_USART6_UART_Init(void);
 static void MX_TIM1_Init(void);
-static void MX_TIM4_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -121,7 +119,6 @@ int main(void)
   MX_USART2_UART_Init();
   MX_USART6_UART_Init();
   MX_TIM1_Init();
-  MX_TIM4_Init();
   /* USER CODE BEGIN 2 */
   LL_USART_EnableIT_RXNE(USART2);
   LL_USART_EnableIT_RXNE(USART6);
@@ -152,6 +149,7 @@ int main(void)
 			  	rxValues[3] = (ibus_rx_buf[8] | ibus_rx_buf[9]<<8);
 			  	rxValues[4] = (ibus_rx_buf[10] | ibus_rx_buf[11]<<8);
 			  	rxValues[5] = (ibus_rx_buf[12] | ibus_rx_buf[13]<<8);
+			  	rxValues[6] = (ibus_rx_buf[14] | ibus_rx_buf[15]<<8);
 			  HAL_UART_Transmit(&huart6, ibus_rx_buf, 32, 100);
 
 		  }
@@ -159,6 +157,8 @@ int main(void)
 
 	  speed = rxValues[1];
 	  steering = rxValues[3];
+	  if(rxValues[6] > 1500) LED = 1;
+	  else LED = 0;
 
 //	  window[window_index] = speed;
 //	  for (uint16_t i = 0; i < window_size; i++){
@@ -174,64 +174,91 @@ int main(void)
 	  smoothingPrev = smoothing;
 	  speed = smoothing;
 
+	  smoothing1 = steering*0.20 + smoothingPrev1*0.80;
+	  smoothingPrev1 = smoothing1;
+	  steering = smoothing1;
+//
 	  speed = speed - 1500;
 	  steering = steering - 1500;
 	  if (speed > -50 && speed < 50){speed = 0;}
 	  if (steering > -50 && steering < 50){steering = 0;}
+//
+//	  if (steering == 0){
+//		  direction = 0;
+//		  if(speed < 0){
+//			  direction = 1;
+//			  speed = speed*-1;
+//		  }
+//		  speedL = speed;
+//		  speedR = speed;
+//		  directionR = direction;
+//		  directionL = !direction;
+//	  }
+//	  else if (steering != 0 && speed == 0){
+//		  direction = 0;
+//		  if(steering < 0){
+//			  direction = 1;
+//			  steering = steering*-1;
+//		  }
+//		  speedL = steering;
+//		  speedR = steering;
+//		  directionR = direction;
+//		  directionL = direction;
+//
+//	  }
+//	  else {
+//		  direction = 0;
+//		  if(speed < 0){
+//			  direction = 1;
+//			  speed = speed*-1;
+//		  }
+//
+//
+//		  if(steering < 0){
+//			  speedL = speed - (int16_t)(speed*steering/500);
+//			  speedR = speed + (int16_t)(speed*steering/500);
+//		  }
+//		  else{
+//			  speedL = speed + (int16_t)(speed*steering/500);
+//			  speedR = speed - (int16_t)(speed*steering/500);
+//		  }
+//
+//		  directionR = direction;
+//		  directionL = !direction;
 
-	  if (steering == 0){
-		  direction = 0;
-		  if(speed < 0){
-			  direction = 1;
-			  speed = speed*-1;
+		  ////////////////////////////////////////////////
+
+		  directionL = 0;
+		  directionR = 0;
+
+
+
+		  speedL = speed - (int16_t)(k*steering/500);
+		  speedR = speed + (int16_t)(k*steering/500);
+
+
+		  if(speedL < 0){
+			  directionL = 1;
+			  speedL = speedL*-1;
 		  }
-		  speedL = speed;
-		  speedR = speed;
-		  directionR = direction;
-		  directionL = !direction;
-	  }
-	  else if (steering != 0 && speed == 0){
-		  direction = 0;
-		  if(steering < 0){
-			  direction = 1;
-			  steering = steering*-1;
-		  }
-		  speedL = steering;
-		  speedR = steering;
-		  directionR = direction;
-		  directionL = direction;
-
-	  }
-	  else {
-		  direction = 0;
-		  if(speed < 0){
-			  direction = 1;
-			  speed = speed*-1;
+		  if(speedR < 0){
+			  directionR = 1;
+			  speedR = speedR*-1;
 		  }
 
 
-		  if(steering < 0){
-			  speedL = speed - (int16_t)(speed*steering/500);
-			  speedR = speed + (int16_t)(speed*steering/500);
-		  }
-		  else{
-			  speedL = speed + (int16_t)(speed*steering/500);
-			  speedR = speed - (int16_t)(speed*steering/500);
-		  }
-		  directionR = direction;
-		  directionL = !direction;
-
-	  }
 
 
 
 
-	  dutyL = (uint16_t) ((speedL*CounterPeriod)/500);
-	  dutyR = (uint16_t) ((speedR*CounterPeriod)/500);
+
+	  dutyL = (uint16_t) ((speedL*CounterPeriod)/(500 + k));
+	  dutyR = (uint16_t) ((speedR*CounterPeriod)/(500 + k));
 	  TIM1->CCR1 = dutyL;
 	  TIM1->CCR2 = dutyR;
 	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_14, directionL);
 	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_15, directionR);
+	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_9, LED);
 
 	  HAL_Delay(50);
   }
@@ -365,55 +392,6 @@ static void MX_TIM1_Init(void)
 }
 
 /**
-  * @brief TIM4 Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_TIM4_Init(void)
-{
-
-  /* USER CODE BEGIN TIM4_Init 0 */
-
-  /* USER CODE END TIM4_Init 0 */
-
-  TIM_MasterConfigTypeDef sMasterConfig = {0};
-  TIM_OC_InitTypeDef sConfigOC = {0};
-
-  /* USER CODE BEGIN TIM4_Init 1 */
-
-  /* USER CODE END TIM4_Init 1 */
-  htim4.Instance = TIM4;
-  htim4.Init.Prescaler = 0;
-  htim4.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim4.Init.Period = 65535;
-  htim4.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-  htim4.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
-  if (HAL_TIM_PWM_Init(&htim4) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
-  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
-  if (HAL_TIMEx_MasterConfigSynchronization(&htim4, &sMasterConfig) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  sConfigOC.OCMode = TIM_OCMODE_PWM1;
-  sConfigOC.Pulse = 0;
-  sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
-  sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
-  if (HAL_TIM_PWM_ConfigChannel(&htim4, &sConfigOC, TIM_CHANNEL_4) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN TIM4_Init 2 */
-
-  /* USER CODE END TIM4_Init 2 */
-  HAL_TIM_MspPostInit(&htim4);
-
-}
-
-/**
   * @brief USART2 Initialization Function
   * @param None
   * @retval None
@@ -522,7 +500,7 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_14|GPIO_PIN_15, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_14|GPIO_PIN_15|GPIO_PIN_9, GPIO_PIN_RESET);
 
   /*Configure GPIO pin : PC13 */
   GPIO_InitStruct.Pin = GPIO_PIN_13;
@@ -531,8 +509,8 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : PB14 PB15 */
-  GPIO_InitStruct.Pin = GPIO_PIN_14|GPIO_PIN_15;
+  /*Configure GPIO pins : PB14 PB15 PB9 */
+  GPIO_InitStruct.Pin = GPIO_PIN_14|GPIO_PIN_15|GPIO_PIN_9;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
