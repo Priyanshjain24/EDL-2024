@@ -10,7 +10,7 @@ RADIAN_TO_DEGREE = 180 / PI
 DEGREE_TO_RADIAN = PI / 180
 DISPLACEMENT_SCALE = 3
 BASE_SPEED_SCALE_R = 15
-BASE_SPEED_SCALE_L = 15
+BASE_SPEED_SCALE_L = 8
 
 l1 = 10.5
 l2 = 14.7
@@ -208,11 +208,11 @@ if __name__ == '__main__':
             u = rxValues[1]
             #u = 0
             
-            #X_req = X + f * sin(theta1+theta2+theta3) - u * cos(theta1+theta2+theta3)
-            #Y_req = Y + f * cos(theta1+theta2+theta3) + u * sin(theta1+theta2+theta3)
+            X_req = X + f * sin(theta1+theta2+theta3) - u * cos(theta1+theta2+theta3)
+            Y_req = Y + f * cos(theta1+theta2+theta3) + u * sin(theta1+theta2+theta3)
             
-            X_req = X + f * 0.2
-            Y_req = Y + u * 0.2
+            #X_req = X + f * 0.2
+            #Y_req = Y + u * 0.2
             
             
             theta1, theta2 = robotic_arm.getThetas(X_req, Y_req)
@@ -241,9 +241,9 @@ if __name__ == '__main__':
         
         for i in range(len(angle_values)):
             if not prev_angle_values[i] is None :
-                alpha = 0.0
+                alpha = 1
                 #print(angle_values[3], end=' ')
-                angle_values[i] = alpha * angle_values[i] + (1 - alpha) * prev_angle_values[i]
+                #angle_values[i] = alpha * angle_values[i] + (1 - alpha) * prev_angle_values[i]
                 #print(angle_values[3])
         
         prev_angle_values = angle_values
@@ -261,6 +261,8 @@ if __name__ == '__main__':
         #print(angle_values[1], angle_values[2], angle_values[3], theta1 + theta2 + theta3)
         print(angle_values)
         time.sleep(loop_time)
+
+
 
 
 
