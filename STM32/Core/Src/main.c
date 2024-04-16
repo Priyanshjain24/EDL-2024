@@ -49,7 +49,7 @@ UART_HandleTypeDef huart6;
 /* USER CODE BEGIN PV */
 extern uint8_t ibus_rx_buf[32];
 extern uint8_t ibus_rx_cplt_flag;
-uint16_t rxValues[7];
+uint16_t rxValues[8];
 
 uint16_t LED;
 int32_t dutyL, dutyR;
@@ -60,7 +60,8 @@ int16_t directionL = 0;
 int16_t directionR = 0;
 
 uint16_t smoothing, smoothing1;
-uint16_t smoothingPrev, smoothingPrev1;
+uint16_t smoothingPrev= 1500;
+uint16_t smoothingPrev1 = 1500;
 
 uint16_t window_size = 10;
 uint16_t window_index = 0;
@@ -68,9 +69,9 @@ int32_t window[10];
 int32_t movingSum = 0;
 int32_t past = 0;
 
-int k =250;
+int k = 450;
 
-
+int initial = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -131,11 +132,18 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+
   while (1)
   {
+//	  if(initial == 0){
+//		  HAL_Delay(3000);
+//		  initial = 1;
+//	  }
+
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+
 
 	  if(ibus_rx_cplt_flag == 1)
 	  {
@@ -150,15 +158,34 @@ int main(void)
 			  	rxValues[4] = (ibus_rx_buf[10] | ibus_rx_buf[11]<<8);
 			  	rxValues[5] = (ibus_rx_buf[12] | ibus_rx_buf[13]<<8);
 			  	rxValues[6] = (ibus_rx_buf[14] | ibus_rx_buf[15]<<8);
-			  HAL_UART_Transmit(&huart6, ibus_rx_buf, 32, 100);
+			  	rxValues[7] = (ibus_rx_buf[18] | ibus_rx_buf[19]<<8);
+
+//			  	if(!((1000 <= rxValues[0] && rxValues[0] <= 2000)&&
+//			  			(1000 <= rxValues[1] && rxValues[1] <= 2000)&&
+//						(1000 <= rxValues[2] && rxValues[2] <= 2000)&&
+//						(1000 <= rxValues[3] && rxValues[3] <= 2000)&&
+//						(1000 <= rxValues[4] && rxValues[4] <= 2000)&&
+//						(1000 <= rxValues[5] && rxValues[5] <= 2000)&&
+//						(1000 <= rxValues[6] && rxValues[6] <= 2000)&&
+//						(1000 <= rxValues[7] && rxValues[7] <= 2000)))
+//			  	{continue;}
+
+			  	if(rxValues[7] < 1500){HAL_UART_Transmit(&huart6, ibus_rx_buf, 32, 100);}
+
 
 		  }
+
 	  }
 
-	  speed = rxValues[1];
-	  steering = rxValues[3];
-	  if(rxValues[6] > 1500) LED = 1;
-	  else LED = 0;
+	  if(rxValues[6] > 1500){ LED = 1;}
+	  else {LED = 0;}
+	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_9, LED);
+
+	  if(rxValues[7] < 1500){continue;}
+
+	  speed = rxValues[2];
+	  steering = rxValues[0];
+
 
 //	  window[window_index] = speed;
 //	  for (uint16_t i = 0; i < window_size; i++){
@@ -222,7 +249,7 @@ int main(void)
 //			  speedL = speed + (int16_t)(speed*steering/500);
 //			  speedR = speed - (int16_t)(speed*steering/500);
 //		  }
-//
+//w
 //		  directionR = direction;
 //		  directionL = !direction;
 
@@ -249,18 +276,15 @@ int main(void)
 
 
 
-
-
-
 	  dutyL = (uint16_t) ((speedL*CounterPeriod)/(500 + k));
 	  dutyR = (uint16_t) ((speedR*CounterPeriod)/(500 + k));
 	  TIM1->CCR1 = dutyL;
 	  TIM1->CCR2 = dutyR;
 	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_14, directionL);
 	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_15, directionR);
-	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_9, LED);
 
-	  HAL_Delay(50);
+
+//	  HAL_Delay(10);
   }
   /* USER CODE END 3 */
 }
